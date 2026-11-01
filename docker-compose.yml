@@ -1,0 +1,62 @@
+services:
+  auth-server:
+    build: ./auth-server
+    container_name: secure-auth-server
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    networks:
+      - smart-network
+    volumes:
+      - ./auth-data:/app/data
+
+  gateway:
+    build: ./gateway
+    container_name: secure-gateway
+    ports:
+      - "5001:5001"
+    depends_on:
+      - auth-server
+    environment:
+      - AUTH_SERVER_URL=http://auth-server:5000
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    networks:
+      - smart-network
+
+  device-simulator:
+    build: ./device-simulator
+    container_name: secure-device-simulator
+    depends_on:
+      - gateway
+      - auth-server
+    environment:
+      - GATEWAY_URL=http://gateway:5001
+      - AUTH_SERVER_URL=http://auth-server:5000
+      - PYTHONUNBUFFERED=1
+    networks:
+      - smart-network
+    restart: unless-stopped
+    # Short startup delay so the auth server and gateway are ready
+    command: sh -c "sleep 10 && python device.py"
+
+  frontend:
+    build: ./frontend
+    container_name: secure-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - gateway
+    networks:
+      - smart-network
+    volumes:
+      - ./frontend/index.html:/usr/share/nginx/html/index.html:ro
+
+networks:
+  smart-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
